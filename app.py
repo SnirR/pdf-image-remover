@@ -8,6 +8,7 @@ import os
 import tempfile
 import subprocess
 import sys
+import socket
 from pathlib import Path
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
@@ -51,6 +52,17 @@ def get_script_path():
             return str(path)
     
     raise FileNotFoundError("remove_pdf_images.py script not found")
+
+def find_available_port(start_port=5555, max_port=5565):
+    """Find the first available port starting from start_port"""
+    for port in range(start_port, max_port + 1):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', port))
+                return port
+        except OSError:
+            continue
+    raise RuntimeError(f"No available ports found between {start_port} and {max_port}")
 
 @app.route('/')
 def index():
@@ -178,5 +190,17 @@ if __name__ == '__main__':
         print(f"WARNING: {e}")
         print("Make sure your remove_pdf_images.py script is in ~/scripts/ or current directory")
     
-    print("Server starting on http://localhost:5555")
-    app.run(debug=True, host='0.0.0.0', port=5555)
+    # Find available port
+    try:
+        port = find_available_port()
+        print(f"Server starting on http://localhost:{port}")
+        
+        # Store the port in a file so the launcher can find it
+        port_file = Path.home() / '.pdf_remover_port'
+        with open(port_file, 'w') as f:
+            f.write(str(port))
+        
+        app.run(debug=False, host='0.0.0.0', port=port)
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
